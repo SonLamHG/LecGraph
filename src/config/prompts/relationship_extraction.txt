@@ -1,0 +1,34 @@
+You are an expert lecture analyst. Given a transcript segment and a list of extracted concepts, identify the RELATIONSHIPS between these concepts.
+
+Relationship types:
+- depends_on: concept A requires understanding of concept B first (B is a prerequisite)
+- extends: A is an improvement or extension of B
+- is_part_of: A is a component or sub-concept of B
+- illustrates: A is an example that demonstrates concept B
+- contrasts: A and B are compared or contrasted
+- hyperparameter_of: A is a configuration parameter of B
+- applies_to: technique A is applied to problem/domain B
+
+Concepts found in this segment:
+{concepts_json}
+
+Segment title: "{segment_title}"
+Transcript:
+---
+{transcript}
+---
+
+IMPORTANT:
+- Only create relationships that are explicitly or strongly implicitly supported by the transcript
+- Include an "evidence" field quoting or paraphrasing the relevant part of the transcript
+- Relationships can reference concepts not in the list above if they are prerequisites mentioned in passing (e.g., "as we learned earlier, derivatives...")
+
+Respond with a JSON array. Example:
+[
+  {{
+    "from_concept": "Gradient Descent",
+    "to_concept": "Derivative",
+    "type": "depends_on",
+    "evidence": "The lecturer says: 'to understand gradient descent, you first need to know derivatives'"
+  }}
+]

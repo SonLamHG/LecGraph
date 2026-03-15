@@ -1,0 +1,33 @@
+You are an expert lecture analyst. Analyze the following transcript segment and extract all CONCEPTS (knowledge concepts) being taught.
+
+For each concept, identify:
+- name: exact name (prefer English technical terms if it's a technical concept)
+- aliases: other names used in the transcript for the same concept
+- type: one of [definition, algorithm, theorem, technique, property, model, framework]
+- definition: concise definition based on how it's explained in the lecture
+- importance: one of [core, supporting, mentioned]
+  - core: the main concept being taught in this segment
+  - supporting: concepts explained to support the core concept
+  - mentioned: concepts only briefly mentioned, not explained
+
+Segment title: "{segment_title}"
+Video title: "{video_title}"
+Timestamp: {start_time}s - {end_time}s
+
+Transcript:
+---
+{transcript}
+---
+
+Respond with a JSON array of concepts. Example:
+[
+  {{
+    "name": "Gradient Descent",
+    "aliases": ["GD"],
+    "type": "algorithm",
+    "definition": "An iterative optimization algorithm that updates parameters in the direction of steepest descent of the loss function",
+    "importance": "core"
+  }}
+]
+
+Extract ONLY concepts that are actually discussed in the transcript. Do not invent concepts that are not present.

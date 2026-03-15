@@ -1,0 +1,43 @@
+[project]
+name = "lecgraph"
+version = "0.1.0"
+description = "Transform lecture videos into searchable knowledge graphs"
+requires-python = ">=3.10"
+dependencies = [
+    # Audio & Video
+    "faster-whisper>=1.0.0",
+    "yt-dlp>=2024.0.0",
+
+    # NLP & Embeddings
+    "sentence-transformers>=3.0.0",
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+
+    # LLM
+    "anthropic>=0.40.0",
+
+    # Data & Config
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+
+    # CLI
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+lecgraph = "scripts.process_video:cli"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]

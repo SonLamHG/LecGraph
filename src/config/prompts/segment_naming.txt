@@ -1,0 +1,29 @@
+You are an expert lecture analyst. Given a transcript segment, provide:
+1. A concise, descriptive title for this segment (max 10 words)
+2. A list of key quotes that are particularly insightful or memorable
+
+Segment from video: "{video_title}"
+Timestamp: {start_time}s - {end_time}s
+
+Transcript:
+---
+{transcript}
+---
+
+Respond with JSON:
+{{
+  "title": "Gradient Descent — Core Intuition and Formula",
+  "key_quotes": [
+    {{
+      "text": "The exact quote from the transcript",
+      "timestamp_hint": "approximate position in the segment: start/middle/end",
+      "relevance": "Why this quote is notable"
+    }}
+  ],
+  "examples": [
+    {{
+      "description": "Brief description of the example given",
+      "illustrates": "Which concept this example demonstrates"
+    }}
+  ]
+}}

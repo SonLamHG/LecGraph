@@ -6,7 +6,7 @@ from rich.console import Console
 from src.config import settings
 from src.pipeline.models import Segment, Sentence
 
-console = Console()
+console = Console(force_terminal=True)
 
 
 def _load_embedding_model():

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-console = Console()
+console = Console(force_terminal=True)
 
 
 def is_youtube_url(source: str) -> bool:
@@ -23,22 +23,29 @@ def is_audio_file(path: Path) -> bool:
     return path.suffix.lower() in {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
 
 
+def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+    """Run subprocess with UTF-8 encoding (fixes Windows cp1252 issues)."""
+    kwargs.setdefault("encoding", "utf-8")
+    kwargs.setdefault("errors", "replace")
+    kwargs.setdefault("text", True)
+    return subprocess.run(cmd, **kwargs)
+
+
 def extract_from_youtube(url: str, output_dir: Path) -> tuple[Path, str]:
     """Download audio from YouTube and return (audio_path, video_title)."""
     console.print(f"[bold blue]Downloading audio from YouTube...[/]")
 
     # Get video title first
-    result = subprocess.run(
+    result = _run(
         ["yt-dlp", "--get-title", url],
         capture_output=True,
-        text=True,
         check=True,
     )
     video_title = result.stdout.strip()
 
     # Download audio as wav
     output_path = output_dir / "audio.wav"
-    subprocess.run(
+    _run(
         [
             "yt-dlp",
             "-x",
@@ -61,7 +68,7 @@ def extract_from_youtube(url: str, output_dir: Path) -> tuple[Path, str]:
     # Convert to wav if not already
     if audio_path.suffix.lower() != ".wav":
         wav_path = output_dir / "audio.wav"
-        subprocess.run(
+        _run(
             ["ffmpeg", "-i", str(audio_path), "-ar", "16000", "-ac", "1", str(wav_path), "-y"],
             check=True,
             capture_output=True,
@@ -78,7 +85,7 @@ def extract_from_video(video_path: Path, output_dir: Path) -> Path:
     console.print(f"[bold blue]Extracting audio from video...[/]")
 
     output_path = output_dir / "audio.wav"
-    subprocess.run(
+    _run(
         [
             "ffmpeg",
             "-i", str(video_path),

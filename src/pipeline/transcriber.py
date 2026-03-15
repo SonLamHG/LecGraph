@@ -8,7 +8,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from src.config import settings
 from src.pipeline.models import Sentence, Word
 
-console = Console()
+console = Console(force_terminal=True)
 
 # Punctuation that ends a sentence
 SENTENCE_ENDINGS = {".", "?", "!", "。", "？", "！"}

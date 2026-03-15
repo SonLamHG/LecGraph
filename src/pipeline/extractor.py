@@ -18,7 +18,7 @@ from src.pipeline.models import (
     TimestampRange,
 )
 
-console = Console()
+console = Console(force_terminal=True)
 
 PROMPTS_DIR = Path(__file__).parent.parent / "config" / "prompts"
 

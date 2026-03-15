@@ -2,8 +2,16 @@
 
 import json
 import hashlib
+import os
+import sys
 import tempfile
 from pathlib import Path
+
+# Fix Windows console encoding for Unicode
+if sys.platform == "win32":
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 import click
 from rich.console import Console
@@ -14,7 +22,7 @@ from src.config import settings
 from src.pipeline import audio_extractor, transcriber, segmenter, extractor
 from src.pipeline.models import PipelineResult
 
-console = Console()
+console = Console(force_terminal=True)
 
 
 def _generate_video_id(source: str) -> str:
@@ -60,7 +68,7 @@ def _print_summary(result: PipelineResult):
         table.add_row(
             str(i + 1),
             ku.title,
-            f"{start} → {end}",
+            f"{start} -> {end}",
             str(len(ku.concepts)),
             str(len(ku.relationships)),
         )
@@ -71,14 +79,14 @@ def _print_summary(result: PipelineResult):
     console.print("\n[bold]All Concepts:[/]")
     for ku in result.knowledge_units:
         for c in ku.concepts:
-            icon = {"core": "●", "supporting": "○", "mentioned": "◦"}.get(c.importance, "·")
+            icon = {"core": "*", "supporting": "o", "mentioned": "-"}.get(c.importance, ".")
             console.print(f"  {icon} [bold]{c.name}[/] ({c.type}) — {c.definition[:80]}...")
 
     # All relationships
     console.print("\n[bold]All Relationships:[/]")
     for ku in result.knowledge_units:
         for r in ku.relationships:
-            console.print(f"  {r.from_concept} —[{r.type}]→ {r.to_concept}")
+            console.print(f"  {r.from_concept} --[{r.type}]--> {r.to_concept}")
 
 
 @click.group()
@@ -109,11 +117,11 @@ def process(source: str, output: str | None, skip_extraction: bool):
     work_dir = Path(tempfile.mkdtemp(prefix="lecgraph_"))
 
     # --- Stage 1: Audio Extraction ---
-    console.print("\n[bold]━━━ Stage 1: Audio Extraction ━━━[/]")
+    console.print("\n[bold]--- Stage 1: Audio Extraction ---[/]")
     audio_path, video_title = audio_extractor.extract_audio(source, work_dir)
 
     # --- Stage 2: Transcription ---
-    console.print("\n[bold]━━━ Stage 2: Transcription ━━━[/]")
+    console.print("\n[bold]--- Stage 2: Transcription ---[/]")
     sentences = transcriber.transcribe(audio_path)
 
     if not sentences:
@@ -123,13 +131,13 @@ def process(source: str, output: str | None, skip_extraction: bool):
     duration = sentences[-1].end
 
     # --- Stage 3: Segmentation ---
-    console.print("\n[bold]━━━ Stage 3: Semantic Segmentation ━━━[/]")
+    console.print("\n[bold]--- Stage 3: Semantic Segmentation ---[/]")
     segments = segmenter.segment(sentences, video_id)
 
     # --- Stage 4: Knowledge Extraction ---
     knowledge_units = []
     if not skip_extraction:
-        console.print("\n[bold]━━━ Stage 4: Knowledge Extraction ━━━[/]")
+        console.print("\n[bold]--- Stage 4: Knowledge Extraction ---[/]")
 
         if not settings.anthropic_api_key:
             console.print(

@@ -1,9 +1,11 @@
-"""Knowledge extraction from segments using LLM (Claude API)."""
+"""Knowledge extraction from segments using LLM (Gemini API)."""
 
 import json
+import re
+import time
 from pathlib import Path
 
-import anthropic
+import google.generativeai as genai
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn
 
@@ -22,6 +24,17 @@ console = Console(force_terminal=True)
 
 PROMPTS_DIR = Path(__file__).parent.parent / "config" / "prompts"
 
+_gemini_model = None
+
+
+def _get_model():
+    """Get or create the Gemini model instance."""
+    global _gemini_model
+    if _gemini_model is None:
+        genai.configure(api_key=settings.gemini_api_key)
+        _gemini_model = genai.GenerativeModel(settings.llm_model)
+    return _gemini_model
+
 
 def _load_prompt(name: str) -> str:
     """Load a prompt template from the prompts directory."""
@@ -29,15 +42,48 @@ def _load_prompt(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _call_llm(prompt: str) -> str:
-    """Call Claude API and return the response text."""
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    message = client.messages.create(
-        model=settings.llm_model,
-        max_tokens=settings.llm_max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return message.content[0].text
+class QuotaExhaustedError(Exception):
+    """Raised when the API key has no quota left (limit: 0). Retrying won't help."""
+    pass
+
+
+def _call_llm(prompt: str, max_retries: int = 3) -> str:
+    """Call Gemini API with smart retry: only retry temporary rate limits."""
+    model = _get_model()
+
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=settings.llm_max_tokens,
+                    temperature=0.2,
+                ),
+            )
+            return response.text
+        except Exception as e:
+            error_msg = str(e)
+            if "429" not in error_msg:
+                raise
+
+            # Distinguish: quota exhausted (limit: 0) vs temporary rate limit
+            if "limit: 0" in error_msg or "quota" in error_msg.lower():
+                raise QuotaExhaustedError(
+                    "API key quota exhausted (limit: 0). "
+                    "Get a new key at https://aistudio.google.com/apikey "
+                    "or enable billing."
+                )
+
+            # Temporary rate limit — retry with delay
+            match = re.search(r"retry in ([\d.]+)s", error_msg)
+            wait_time = min(float(match.group(1)) + 2 if match else 15.0, 30.0)
+            console.print(
+                f"  [yellow]Rate limited. Waiting {wait_time:.0f}s "
+                f"(attempt {attempt + 1}/{max_retries})...[/]"
+            )
+            time.sleep(wait_time)
+
+    raise RuntimeError(f"Failed after {max_retries} retries")
 
 
 def _parse_json_response(text: str) -> list | dict:
@@ -219,20 +265,27 @@ def extract_all(
                 ku = extract_knowledge(seg, video_id, video_title)
                 knowledge_units.append(ku)
 
-                concept_names = [c.name for c in ku.concepts]
                 progress.update(
                     task,
                     advance=1,
                     description=f"[{seg.segment_id}] {len(ku.concepts)} concepts",
                 )
                 console.print(
-                    f"  [dim]• {seg.segment_id} \"{ku.title}\":[/] "
+                    f"  [dim]* {seg.segment_id} \"{ku.title}\":[/] "
                     f"{len(ku.concepts)} concepts, "
                     f"{len(ku.relationships)} relationships"
                 )
 
+            except QuotaExhaustedError:
+                console.print(
+                    "\n[bold red]API quota exhausted. Stopping extraction.[/]"
+                    "\n[yellow]Get a new key at https://aistudio.google.com/apikey[/]"
+                    f"\n[dim]Partial results: {len(knowledge_units)}/{len(segments)} segments processed[/]"
+                )
+                break
+
             except Exception as e:
-                console.print(f"  [red]Error processing {seg.segment_id}: {e}[/]")
+                console.print(f"  [red]Error on {seg.segment_id}: {e}[/]")
                 progress.update(task, advance=1)
 
     total_concepts = sum(len(ku.concepts) for ku in knowledge_units)

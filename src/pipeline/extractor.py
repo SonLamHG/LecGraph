@@ -1,11 +1,11 @@
-"""Knowledge extraction from segments using LLM (Gemini API)."""
+"""Knowledge extraction from segments using LLM (OpenAI API)."""
 
 import json
 import re
 import time
 from pathlib import Path
 
-import google.generativeai as genai
+from openai import OpenAI
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn
 
@@ -24,16 +24,15 @@ console = Console(force_terminal=True)
 
 PROMPTS_DIR = Path(__file__).parent.parent / "config" / "prompts"
 
-_gemini_model = None
+_client = None
 
 
-def _get_model():
-    """Get or create the Gemini model instance."""
-    global _gemini_model
-    if _gemini_model is None:
-        genai.configure(api_key=settings.gemini_api_key)
-        _gemini_model = genai.GenerativeModel(settings.llm_model)
-    return _gemini_model
+def _get_client():
+    """Get or create the OpenAI client instance."""
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=settings.openai_api_key)
+    return _client
 
 
 def _load_prompt(name: str) -> str:
@@ -43,39 +42,43 @@ def _load_prompt(name: str) -> str:
 
 
 class QuotaExhaustedError(Exception):
-    """Raised when the API key has no quota left (limit: 0). Retrying won't help."""
+    """Raised when the API key has no quota left. Retrying won't help."""
     pass
 
 
 def _call_llm(prompt: str, max_retries: int = 3) -> str:
-    """Call Gemini API with smart retry: only retry temporary rate limits."""
-    model = _get_model()
+    """Call OpenAI API with smart retry: only retry temporary rate limits."""
+    client = _get_client()
 
     for attempt in range(max_retries):
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=settings.llm_max_tokens,
-                    temperature=0.2,
-                ),
+            response = client.chat.completions.create(
+                model=settings.llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=settings.llm_max_tokens,
+                temperature=0.2,
             )
-            return response.text
+            return response.choices[0].message.content
         except Exception as e:
             error_msg = str(e)
             if "429" not in error_msg:
+                # Check for insufficient_quota separately
+                if "insufficient_quota" in error_msg:
+                    raise QuotaExhaustedError(
+                        "API key quota exhausted. "
+                        "Check your billing at https://platform.openai.com/account/billing"
+                    )
                 raise
 
-            # Distinguish: quota exhausted (limit: 0) vs temporary rate limit
-            if "limit: 0" in error_msg or "quota" in error_msg.lower():
+            # Distinguish: quota exhausted vs temporary rate limit
+            if "insufficient_quota" in error_msg:
                 raise QuotaExhaustedError(
-                    "API key quota exhausted (limit: 0). "
-                    "Get a new key at https://aistudio.google.com/apikey "
-                    "or enable billing."
+                    "API key quota exhausted. "
+                    "Check your billing at https://platform.openai.com/account/billing"
                 )
 
             # Temporary rate limit — retry with delay
-            match = re.search(r"retry in ([\d.]+)s", error_msg)
+            match = re.search(r"retry after ([\d.]+)", error_msg, re.IGNORECASE)
             wait_time = min(float(match.group(1)) + 2 if match else 15.0, 30.0)
             console.print(
                 f"  [yellow]Rate limited. Waiting {wait_time:.0f}s "
@@ -279,7 +282,7 @@ def extract_all(
             except QuotaExhaustedError:
                 console.print(
                     "\n[bold red]API quota exhausted. Stopping extraction.[/]"
-                    "\n[yellow]Get a new key at https://aistudio.google.com/apikey[/]"
+                    "\n[yellow]Check billing at https://platform.openai.com/account/billing[/]"
                     f"\n[dim]Partial results: {len(knowledge_units)}/{len(segments)} segments processed[/]"
                 )
                 break

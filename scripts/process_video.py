@@ -139,9 +139,9 @@ def process(source: str, output: str | None, skip_extraction: bool):
     if not skip_extraction:
         console.print("\n[bold]--- Stage 4: Knowledge Extraction ---[/]")
 
-        if not settings.gemini_api_key:
+        if not settings.openai_api_key:
             console.print(
-                "[red]GEMINI_API_KEY not set. "
+                "[red]OPENAI_API_KEY not set. "
                 "Run with --skip-extraction or set the key in .env[/]"
             )
             return

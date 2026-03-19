@@ -9,8 +9,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Gemini
-    gemini_api_key: str = ""
+    # OpenAI
+    openai_api_key: str = ""
 
     # Whisper
     whisper_model_size: str = "large-v3"
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     similarity_smoothing_window: int = 3
 
     # LLM
-    llm_model: str = "gemini-2.0-flash"
+    llm_model: str = "gpt-4o-mini"
     llm_max_tokens: int = 4096
 
     # Output

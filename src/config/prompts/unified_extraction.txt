@@ -1,0 +1,86 @@
+You are an expert lecture analyst. Analyze the transcript segment below and extract ALL of the following in a single JSON response.
+
+## 1. SEGMENT TITLE (max 10 words)
+TITLE RULES:
+- Capture what is UNIQUELY discussed in THIS segment, not the overall video topic.
+- Do NOT start with "Understanding...", "Introduction to...", "Exploring...", or "Overview of...".
+- Focus on the SPECIFIC sub-topic, technique, or example.
+- Use the pattern: "[Specific Topic] — [Key Aspect]" when possible.
+- The title MUST be different from the video title.
+
+## 2. CONCEPTS
+For each concept found in the transcript:
+- name: exact name (prefer English technical terms)
+- aliases: other names used in the transcript for the same concept
+- type: one of [definition, algorithm, theorem, technique, property, model, framework]
+- definition: concise definition based on how it's explained in the lecture
+- importance: one of [core, supporting, mentioned]
+  - core: the main concept being taught in this segment
+  - supporting: concepts explained to support the core concept
+  - mentioned: concepts only briefly mentioned, not explained
+
+## 3. RELATIONSHIPS between concepts
+Relationship types:
+- depends_on: A requires understanding of B (B is a prerequisite)
+- extends: A is an improvement or extension of B
+- is_part_of: A is a component of B (A is the PART, B is the WHOLE)
+- illustrates: A is an example that demonstrates B
+- contrasts: A and B are compared or contrasted
+- applies_to: technique A is applied to problem/domain B
+
+DIRECTION RULES:
+- "from_concept" is the SUBJECT, "to_concept" is the OBJECT.
+- For is_part_of: from = PART, to = WHOLE. Correct: Neuron → Neural Network. Wrong: Neural Network → Neuron.
+- For depends_on: from NEEDS to. Correct: Backpropagation → Chain Rule.
+- Self-check: if swapping from/to still sounds right, you likely have the direction wrong.
+
+## 4. KEY QUOTES and EXAMPLES
+
+---
+
+Video title: "{video_title}"
+Timestamp: {start_time}s - {end_time}s
+
+Transcript:
+---
+{transcript}
+---
+
+Respond with a single JSON object:
+{{
+  "title": "Hidden Layers — Role and Architecture Choices",
+  "concepts": [
+    {{
+      "name": "Gradient Descent",
+      "aliases": ["GD"],
+      "type": "algorithm",
+      "definition": "An iterative optimization algorithm...",
+      "importance": "core"
+    }}
+  ],
+  "relationships": [
+    {{
+      "from_concept": "Gradient Descent",
+      "to_concept": "Derivative",
+      "type": "depends_on",
+      "evidence": "The lecturer says: 'to understand gradient descent, you first need to know derivatives'"
+    }}
+  ],
+  "key_quotes": [
+    {{
+      "text": "The exact quote from the transcript",
+      "relevance": "Why this quote is notable"
+    }}
+  ],
+  "examples": [
+    {{
+      "description": "Brief description of the example given",
+      "illustrates": "Which concept this example demonstrates"
+    }}
+  ]
+}}
+
+IMPORTANT:
+- Extract ONLY concepts actually discussed in the transcript
+- Only create relationships supported by the transcript, with evidence
+- Do NOT invent concepts or relationships not present in the text

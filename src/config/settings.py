@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # LLM
     llm_model: str = "gpt-4o-mini"
     llm_max_tokens: int = 4096
+    llm_max_workers: int = 5
 
     # Output
     output_dir: Path = Path("output")

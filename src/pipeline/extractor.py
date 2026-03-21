@@ -2,7 +2,9 @@
 
 import json
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from openai import OpenAI
@@ -25,13 +27,16 @@ console = Console(force_terminal=True)
 PROMPTS_DIR = Path(__file__).parent.parent / "config" / "prompts"
 
 _client = None
+_client_lock = threading.Lock()
 
 
 def _get_client():
-    """Get or create the OpenAI client instance."""
+    """Get or create the OpenAI client instance (thread-safe)."""
     global _client
     if _client is None:
-        _client = OpenAI(api_key=settings.openai_api_key)
+        with _client_lock:
+            if _client is None:
+                _client = OpenAI(api_key=settings.openai_api_key)
     return _client
 
 
@@ -106,7 +111,7 @@ def _parse_json_response(text: str) -> list | dict:
 
 
 def _extract_concepts(segment: Segment, video_title: str) -> list[Concept]:
-    """Pass 1: Extract concepts from a segment."""
+    """Extract concepts from a segment (1 LLM call)."""
     template = _load_prompt("concept_extraction")
     prompt = template.format(
         segment_title=segment.title,
@@ -137,7 +142,7 @@ def _extract_relationships(
     segment: Segment,
     concepts: list[Concept],
 ) -> list[Relationship]:
-    """Pass 2: Extract relationships between concepts."""
+    """Extract relationships between concepts (1 LLM call)."""
     if not concepts:
         return []
 
@@ -169,7 +174,7 @@ def _extract_relationships(
 
 
 def _extract_metadata(segment: Segment, video_title: str) -> dict:
-    """Extract segment title, key quotes, and examples."""
+    """Extract segment title, key quotes, and examples (1 LLM call)."""
     template = _load_prompt("segment_naming")
     prompt = template.format(
         video_title=video_title,
@@ -189,16 +194,18 @@ def extract_knowledge(
 ) -> KnowledgeUnit:
     """
     Extract complete knowledge from a single segment.
-    Runs 3 LLM calls: metadata, concepts, relationships.
+    3 LLM calls: metadata + concepts (parallel), then relationships.
     """
-    # Pass 0: Segment naming + examples + key quotes
-    metadata = _extract_metadata(segment, video_title)
+    # Phase 1: metadata and concepts in parallel (2 LLM calls)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_meta = executor.submit(_extract_metadata, segment, video_title)
+        future_concepts = executor.submit(_extract_concepts, segment, video_title)
+        metadata = future_meta.result()
+        concepts = future_concepts.result()
+
     segment.title = metadata.get("title", segment.title)
 
-    # Pass 1: Concept extraction
-    concepts = _extract_concepts(segment, video_title)
-
-    # Pass 2: Relationship extraction
+    # Phase 2: relationships (depends on concepts, 1 LLM call)
     relationships = _extract_relationships(segment, concepts)
 
     # Build examples
@@ -251,9 +258,11 @@ def extract_all(
         f"\n[bold blue]Extracting knowledge from {len(segments)} segments...[/]"
     )
     console.print(f"[dim]Using model: {settings.llm_model}[/]")
-    console.print(f"[dim]LLM calls per segment: 3 (metadata + concepts + relationships)[/]")
+    console.print(f"[dim]LLM calls per segment: 3 (metadata + concepts || relationships)[/]")
+    console.print(f"[dim]Parallel workers: {settings.llm_max_workers}[/]")
 
-    knowledge_units = []
+    results: list[KnowledgeUnit | None] = [None] * len(segments)
+    quota_exhausted = threading.Event()
 
     with Progress(
         TextColumn("[progress.description]{task.description}"),
@@ -263,40 +272,59 @@ def extract_all(
     ) as progress:
         task = progress.add_task("Extracting...", total=len(segments))
 
-        for seg in segments:
-            try:
-                ku = extract_knowledge(seg, video_id, video_title)
-                knowledge_units.append(ku)
+        def _process_segment(index: int, seg: Segment) -> tuple[int, KnowledgeUnit]:
+            if quota_exhausted.is_set():
+                raise QuotaExhaustedError("Cancelled")
+            return index, extract_knowledge(seg, video_id, video_title)
 
-                progress.update(
-                    task,
-                    advance=1,
-                    description=f"[{seg.segment_id}] {len(ku.concepts)} concepts",
-                )
-                console.print(
-                    f"  [dim]* {seg.segment_id} \"{ku.title}\":[/] "
-                    f"{len(ku.concepts)} concepts, "
-                    f"{len(ku.relationships)} relationships"
-                )
+        with ThreadPoolExecutor(max_workers=settings.llm_max_workers) as executor:
+            futures = {
+                executor.submit(_process_segment, i, seg): i
+                for i, seg in enumerate(segments)
+            }
 
-            except QuotaExhaustedError:
-                console.print(
-                    "\n[bold red]API quota exhausted. Stopping extraction.[/]"
-                    "\n[yellow]Check billing at https://platform.openai.com/account/billing[/]"
-                    f"\n[dim]Partial results: {len(knowledge_units)}/{len(segments)} segments processed[/]"
-                )
-                break
+            for future in as_completed(futures):
+                idx = futures[future]
+                seg = segments[idx]
+                try:
+                    _, ku = future.result()
+                    results[idx] = ku
 
-            except Exception as e:
-                console.print(f"  [red]Error on {seg.segment_id}: {e}[/]")
-                progress.update(task, advance=1)
+                    progress.update(
+                        task,
+                        advance=1,
+                        description=f"[{seg.segment_id}] {len(ku.concepts)} concepts",
+                    )
+                    console.print(
+                        f"  [dim]* {seg.segment_id} \"{ku.title}\":[/] "
+                        f"{len(ku.concepts)} concepts, "
+                        f"{len(ku.relationships)} relationships"
+                    )
+
+                except QuotaExhaustedError:
+                    quota_exhausted.set()
+                    for f in futures:
+                        f.cancel()
+                    done_count = sum(1 for r in results if r is not None)
+                    console.print(
+                        "\n[bold red]API quota exhausted. Stopping extraction.[/]"
+                        "\n[yellow]Check billing at https://platform.openai.com/account/billing[/]"
+                        f"\n[dim]Partial results: {done_count}/{len(segments)} segments processed[/]"
+                    )
+                    break
+
+                except Exception as e:
+                    console.print(f"  [red]Error on {seg.segment_id}: {e}[/]")
+                    progress.update(task, advance=1)
+
+    knowledge_units = [ku for ku in results if ku is not None]
 
     total_concepts = sum(len(ku.concepts) for ku in knowledge_units)
     total_rels = sum(len(ku.relationships) for ku in knowledge_units)
     console.print(
         f"\n[green]Extraction complete:[/] "
         f"{total_concepts} concepts, {total_rels} relationships "
-        f"from {len(knowledge_units)} segments"
+        f"from {len(knowledge_units)}/{len(segments)} segments"
     )
 
     return knowledge_units

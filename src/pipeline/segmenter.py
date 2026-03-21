@@ -152,6 +152,50 @@ def _build_segments(
     return segments
 
 
+def _merge_short_segments(
+    segments: list[Segment],
+    min_duration: float,
+) -> list[Segment]:
+    """Merge segments shorter than min_duration into their neighbor."""
+    if len(segments) <= 1:
+        return segments
+
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(segments)):
+            duration = segments[i].end - segments[i].start
+            if duration < min_duration and len(segments) > 1:
+                if i == len(segments) - 1:
+                    target = i - 1
+                elif i == 0:
+                    target = 1
+                else:
+                    prev_dur = segments[i - 1].end - segments[i - 1].start
+                    next_dur = segments[i + 1].end - segments[i + 1].start
+                    target = i - 1 if prev_dur <= next_dur else i + 1
+
+                a, b = min(i, target), max(i, target)
+                merged_seg = Segment(
+                    segment_id=segments[a].segment_id,
+                    title=segments[a].title,
+                    start=segments[a].start,
+                    end=segments[b].end,
+                    transcript=segments[a].transcript + " " + segments[b].transcript,
+                    sentences=segments[a].sentences + segments[b].sentences,
+                )
+                segments = segments[:a] + [merged_seg] + segments[b + 1:]
+
+                base_id = segments[0].segment_id.rsplit("_seg", 1)[0]
+                for j, seg in enumerate(segments):
+                    seg.segment_id = f"{base_id}_seg{j + 1:03d}"
+
+                merged = True
+                break
+
+    return segments
+
+
 def segment(
     sentences: list[Sentence],
     video_id: str = "vid01",
@@ -203,6 +247,9 @@ def segment(
 
     # Step 5: Build segments
     segments = _build_segments(sentences, boundaries, video_id)
+
+    # Step 6: Merge short segments
+    segments = _merge_short_segments(segments, min_duration=settings.segment_min_duration)
 
     for seg in segments:
         duration = seg.end - seg.start

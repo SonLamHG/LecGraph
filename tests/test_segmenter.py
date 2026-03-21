@@ -4,9 +4,11 @@ import numpy as np
 import pytest
 
 from src.pipeline.models import Sentence
+from src.pipeline.models import Segment
 from src.pipeline.segmenter import (
     _cosine_similarity_consecutive,
     _find_boundaries,
+    _merge_short_segments,
     _smooth,
 )
 
@@ -102,3 +104,60 @@ class TestFindBoundaries:
         # No boundary should create segments < 30s
         # With 5s sentences and 30s min, at most 1 boundary
         assert len(boundaries) <= 1
+
+
+def _make_segment(seg_id: str, start: float, end: float) -> Segment:
+    return Segment(
+        segment_id=seg_id,
+        title=f"Title {seg_id}",
+        start=start,
+        end=end,
+        transcript=f"Text for {seg_id}",
+        sentences=[_make_sentence("s", start, end)],
+    )
+
+
+class TestMergeShortSegments:
+    def test_short_last_segment_merged(self):
+        segments = [
+            _make_segment("v_seg001", 0, 60),
+            _make_segment("v_seg002", 60, 120),
+            _make_segment("v_seg003", 120, 130),  # 10s — too short
+        ]
+        result = _merge_short_segments(segments, min_duration=30)
+        assert len(result) == 2
+        assert result[-1].end == 130
+
+    def test_short_first_segment_merged(self):
+        segments = [
+            _make_segment("v_seg001", 0, 5),  # 5s — too short
+            _make_segment("v_seg002", 5, 65),
+            _make_segment("v_seg003", 65, 125),
+        ]
+        result = _merge_short_segments(segments, min_duration=30)
+        assert len(result) == 2
+        assert result[0].start == 0
+        assert result[0].end == 65
+
+    def test_all_above_threshold_unchanged(self):
+        segments = [
+            _make_segment("v_seg001", 0, 60),
+            _make_segment("v_seg002", 60, 120),
+        ]
+        result = _merge_short_segments(segments, min_duration=30)
+        assert len(result) == 2
+
+    def test_single_segment_unchanged(self):
+        segments = [_make_segment("v_seg001", 0, 10)]
+        result = _merge_short_segments(segments, min_duration=30)
+        assert len(result) == 1
+
+    def test_segment_ids_renumbered(self):
+        segments = [
+            _make_segment("v_seg001", 0, 60),
+            _make_segment("v_seg002", 60, 120),
+            _make_segment("v_seg003", 120, 125),  # short
+        ]
+        result = _merge_short_segments(segments, min_duration=30)
+        assert result[0].segment_id == "v_seg001"
+        assert result[1].segment_id == "v_seg002"

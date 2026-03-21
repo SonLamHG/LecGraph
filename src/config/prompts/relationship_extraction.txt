@@ -3,11 +3,22 @@ You are an expert lecture analyst. Given a transcript segment and a list of extr
 Relationship types:
 - depends_on: concept A requires understanding of concept B first (B is a prerequisite)
 - extends: A is an improvement or extension of B
-- is_part_of: A is a component or sub-concept of B
+- is_part_of: A is a component or sub-concept of B (A is the smaller part, B is the whole)
 - illustrates: A is an example that demonstrates concept B
 - contrasts: A and B are compared or contrasted
 - hyperparameter_of: A is a configuration parameter of B
 - applies_to: technique A is applied to problem/domain B
+
+DIRECTION RULES — read carefully:
+- "from_concept" is the SUBJECT, "to_concept" is the OBJECT.
+- For is_part_of: from_concept is the PART, to_concept is the WHOLE.
+  Correct: Neuron --[is_part_of]--> Neural Network (neuron is part of the network)
+  Wrong:   Neural Network --[is_part_of]--> Neuron
+- For depends_on: from_concept NEEDS to_concept.
+  Correct: Backpropagation --[depends_on]--> Chain Rule
+- For applies_to: from_concept is the TOOL/METHOD, to_concept is the TARGET.
+  Correct: Gradient Descent --[applies_to]--> Loss Function
+- Self-check: if you swap from/to and the sentence still sounds correct, you likely have the direction wrong.
 
 Concepts found in this segment:
 {concepts_json}

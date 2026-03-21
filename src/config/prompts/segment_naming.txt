@@ -2,6 +2,13 @@ You are an expert lecture analyst. Given a transcript segment, provide:
 1. A concise, descriptive title for this segment (max 10 words)
 2. A list of key quotes that are particularly insightful or memorable
 
+TITLE RULES:
+- The title must capture what is UNIQUELY discussed in THIS segment, not the overall video topic.
+- Do NOT start with generic phrases like "Understanding...", "Introduction to...", "Exploring...", or "Overview of...".
+- Focus on the SPECIFIC sub-topic, technique, or example explained in this segment.
+- Use the pattern: "[Specific Topic] — [Key Aspect]" when possible.
+- The title MUST be different from the video title. Do NOT repeat or paraphrase the video title.
+
 Segment from video: "{video_title}"
 Timestamp: {start_time}s - {end_time}s
 
@@ -12,7 +19,7 @@ Transcript:
 
 Respond with JSON:
 {{
-  "title": "Gradient Descent — Core Intuition and Formula",
+  "title": "Hidden Layers — Role and Architecture Choices",
   "key_quotes": [
     {{
       "text": "The exact quote from the transcript",

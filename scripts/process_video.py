@@ -20,6 +20,7 @@ from rich.table import Table
 
 from src.config import settings
 from src.pipeline import audio_extractor, transcriber, segmenter, extractor
+from src.pipeline.postprocessor import deduplicate_concepts, build_unique_concepts
 from src.pipeline.models import PipelineResult
 
 console = Console(force_terminal=True)
@@ -147,10 +148,23 @@ def process(source: str, output: str | None, skip_extraction: bool):
             return
 
         knowledge_units = extractor.extract_all(segments, video_id, video_title)
+
+        # --- Stage 4b: Post-processing ---
+        console.print("\n[bold]--- Stage 4b: Post-processing ---[/]")
+        all_names_before = [c.name for ku in knowledge_units for c in ku.concepts]
+        knowledge_units = deduplicate_concepts(knowledge_units)
+        all_names_after = [c.name for ku in knowledge_units for c in ku.concepts]
+        unique_before = len(set(all_names_before))
+        unique_after = len(set(all_names_after))
+        console.print(
+            f"[dim]Deduplicated: {unique_before} unique names → {unique_after} "
+            f"(definitions & relationships normalized)[/]"
+        )
     else:
         console.print("\n[dim]Skipping LLM extraction (--skip-extraction)[/]")
 
     # --- Build Result ---
+    unique_concepts = build_unique_concepts(knowledge_units) if knowledge_units else []
     result = PipelineResult(
         video_id=video_id,
         video_title=video_title,
@@ -158,6 +172,7 @@ def process(source: str, output: str | None, skip_extraction: bool):
         duration=duration,
         segments=segments,
         knowledge_units=knowledge_units,
+        unique_concepts=unique_concepts,
     )
 
     # --- Save Output ---

@@ -94,3 +94,4 @@ class PipelineResult(BaseModel):
     duration: float
     segments: list[Segment]
     knowledge_units: list[KnowledgeUnit]
+    unique_concepts: list[Concept] = []

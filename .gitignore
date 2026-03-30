@@ -23,6 +23,9 @@ env/
 # Output
 output/
 
+# Data (ChromaDB, etc.)
+data/
+
 # Temp
 *.tmp
 lecgraph_*/

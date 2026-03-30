@@ -1,0 +1,20 @@
+You are an expert at identifying whether two concepts from lecture transcripts refer to the same thing.
+
+For each pair of concepts below, determine if they are:
+- **SAME**: They refer to the exact same concept (just different names, abbreviations, or translations)
+- **DIFFERENT**: They are distinct concepts
+- **RELATED_BUT_DIFFERENT**: They are related but distinct concepts (e.g., "Neural Network" and "Deep Learning")
+
+Consider:
+- Names and aliases of each concept
+- Their definitions
+- Whether one is just an abbreviation, translation, or alternate name of the other
+
+Pairs:
+{pairs_json}
+
+Respond with ONLY a JSON array (no extra text):
+[
+  {{"pair_index": 0, "verdict": "SAME", "reason": "Brief explanation"}},
+  {{"pair_index": 1, "verdict": "DIFFERENT", "reason": "Brief explanation"}}
+]

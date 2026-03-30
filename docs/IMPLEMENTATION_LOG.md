@@ -6,8 +6,8 @@
 |---|---|
 | Ten du an | LecGraph - Bien video bai giang thanh Knowledge Graph |
 | Ngay bat dau | 2026-03-15 |
-| Trang thai hien tai | Phase 1 hoan thanh, dang chuyen sang Phase 2 |
-| Tech stack | Python 3.12, Whisper, Gemini API, sentence-transformers |
+| Trang thai hien tai | Phase 2 hoan thanh, dang chuyen sang Phase 3 |
+| Tech stack | Python 3.12, Whisper, OpenAI API, sentence-transformers, Neo4j, ChromaDB, FastAPI |
 | Repository | D:\code\repo_cv |
 
 ---
@@ -192,64 +192,113 @@ Xay dung pipeline xu ly end-to-end: Video -> Audio -> Transcript -> Segments -> 
 ### Muc tieu
 Xay dung Knowledge Graph tu extracted data, implement semantic search va prerequisite query.
 
-### Cong viec can lam
+### Cong viec da thuc hien
+
+#### 2.0 Shared Infrastructure (Refactoring)
+- **Trang thai:** Hoan thanh
+- **Mo ta:** Refactor code de tai su dung embedding model va LLM client across modules
+- **Cong viec:**
+  - [x] Tao `src/pipeline/embeddings.py` — shared embedding singleton (get_embedding_model, embed_texts)
+  - [x] Tao `src/pipeline/llm_utils.py` — shared LLM client (get_client, call_llm, parse_json_response, QuotaExhaustedError)
+  - [x] Refactor `segmenter.py` de import tu `embeddings.py`
+  - [x] Refactor `extractor.py` de import tu `llm_utils.py`
+  - [x] Update `settings.py` voi Neo4j, ChromaDB, API settings
+  - [x] Update `pyproject.toml` voi dependencies: neo4j, chromadb, fastapi, uvicorn
 
 #### 2.1 Graph Database Setup
-- **Trang thai:** Chua bat dau
+- **Trang thai:** Hoan thanh
 - **Mo ta:** Setup Neo4j, tao schema, import data tu KnowledgeUnits
 - **Cong viec:**
-  - [ ] Setup Neo4j (Docker hoac local install)
-  - [ ] Implement `src/db/neo4j_client.py` — connection, queries
-  - [ ] Implement `src/pipeline/graph_builder.py` — tao nodes va edges tu KnowledgeUnits
-  - [ ] Tao Cypher constraints va indexes
+  - [x] Implement `src/db/neo4j_client.py` — singleton driver, run_query, run_write, ensure_constraints
+  - [x] Implement `src/pipeline/graph_builder.py` — tao Video, Segment, Concept, Example nodes + edges (BELONGS_TO, EXPLAINED_IN, ILLUSTRATES, DEPENDS_ON, etc.)
+  - [x] Tao Cypher constraints va indexes (concept_name, segment_id, video_id unique)
+  - [x] Dung MERGE de idempotent
+- **Files:** `src/db/__init__.py`, `src/db/neo4j_client.py`, `src/pipeline/graph_builder.py`
 
 #### 2.2 Entity Resolution
-- **Trang thai:** Chua bat dau
-- **Mo ta:** Merge duplicate concepts tu nhieu segments/videos
+- **Trang thai:** Hoan thanh
+- **Mo ta:** Merge duplicate concepts tu nhieu segments/videos bang embedding similarity + LLM verification
 - **Cong viec:**
-  - [ ] Candidate generation: embedding similarity > threshold
-  - [ ] LLM verification: SAME / DIFFERENT / RELATED_BUT_DIFFERENT
-  - [ ] Merge logic: gop aliases, chon definition tot nhat, giu tat ca segment references
+  - [x] Candidate generation: pairwise cosine similarity > threshold (0.75) + alias overlap
+  - [x] LLM verification: SAME / DIFFERENT / RELATED_BUT_DIFFERENT (batch 10 pairs/call)
+  - [x] Merge logic: union-find, gop aliases, chon best definition/importance
+  - [x] Prompt template `entity_resolution.txt`
+- **Files:** `src/pipeline/entity_resolver.py`, `src/config/prompts/entity_resolution.txt`
 
 #### 2.3 Cross-video Concept Linking
-- **Trang thai:** Chua bat dau
+- **Trang thai:** Hoan thanh
 - **Mo ta:** Lien ket concepts giua nhieu video trong cung khoa hoc
 - **Cong viec:**
-  - [ ] Detect cung concept xuat hien o nhieu video
-  - [ ] Tao edges `explained_in` tu concept -> segments
+  - [x] Collect all concepts across multiple PipelineResults
+  - [x] Run entity resolution tren combined concept set
+  - [x] Tao EXPLAINED_IN edges tu resolved concepts -> segments across videos
+- **File:** `src/pipeline/cross_linker.py`
 
 #### 2.4 Vector Store Setup
-- **Trang thai:** Chua bat dau
+- **Trang thai:** Hoan thanh
 - **Mo ta:** Setup ChromaDB de index embeddings cho semantic search
 - **Cong viec:**
-  - [ ] Setup ChromaDB (local)
-  - [ ] Implement `src/db/chroma_client.py`
-  - [ ] Implement `src/pipeline/indexer.py` — embed va index segments + concepts
+  - [x] Implement `src/db/chroma_client.py` — singleton PersistentClient, 2 collections (segments, concepts)
+  - [x] Implement `src/pipeline/indexer.py` — embed va upsert segments + concepts voi metadata
+  - [x] Dung shared `embeddings.embed_texts()` (khong dung ChromaDB built-in embedding)
+- **Files:** `src/db/chroma_client.py`, `src/pipeline/indexer.py`
 
 #### 2.5 Semantic Search Engine
-- **Trang thai:** Chua bat dau
+- **Trang thai:** Hoan thanh
 - **Mo ta:** Tim kiem theo ngu nghia, ket hop voi graph enrichment
 - **Cong viec:**
-  - [ ] Vector search tren ChromaDB -> top-K segments
-  - [ ] Graph enrichment: traverse graph de tim prerequisites, related concepts, examples
-  - [ ] Rank va format results
+  - [x] Vector search tren ChromaDB segments collection -> top-K
+  - [x] Graph enrichment: query Neo4j de tim concepts, prerequisites, related, examples cho moi segment
+  - [x] Graceful degradation khi Neo4j khong available
+  - [x] Pydantic response models (SearchResult, SearchResponse)
+- **Files:** `src/search/__init__.py`, `src/search/engine.py`, `src/search/models.py`
 
 #### 2.6 Prerequisite Query & Learning Path
-- **Trang thai:** Chua bat dau
+- **Trang thai:** Hoan thanh
 - **Mo ta:** Truy van prerequisites va tao learning path
 - **Cong viec:**
-  - [ ] Prerequisite query: traverse `depends_on` edges recursively
-  - [ ] Learning path: topological sort tren dependency subgraph
-  - [ ] Estimated time tinh tu segment durations
+  - [x] Prerequisite query: recursive DEPENDS_ON traversal voi max_depth, deduplication
+  - [x] Learning path: topological sort (Kahn's algorithm) tren dependency subgraph
+  - [x] Known concepts pruning
+  - [x] Estimated time tinh tu segment durations
+- **Files:** `src/search/prerequisites.py`, `src/search/learning_path.py`
 
 #### 2.7 FastAPI Backend
-- **Trang thai:** Chua bat dau
+- **Trang thai:** Hoan thanh
 - **Mo ta:** REST API cho frontend
 - **Cong viec:**
-  - [ ] Setup FastAPI app (`src/api/main.py`)
-  - [ ] Routes: videos, search, graph, learning_path
-  - [ ] Pydantic response models
-  - [ ] CORS config cho frontend
+  - [x] Setup FastAPI app (`src/api/main.py`) voi lifespan (startup: ensure_constraints, shutdown: close_driver)
+  - [x] CORS middleware cho frontend (localhost:3000)
+  - [x] Routes: videos (CRUD + process), graph (concepts + prerequisites), search, learning_path
+  - [x] Pydantic request/response models
+  - [x] Pipeline trigger via BackgroundTasks
+- **Files:** `src/api/main.py`, `src/api/models.py`, `src/api/routes/videos.py`, `src/api/routes/graph.py`, `src/api/routes/search.py`, `src/api/routes/learning_path.py`
+- **Endpoints:**
+  - `POST /api/videos` — them video
+  - `GET /api/videos` — list videos
+  - `GET /api/videos/{id}/segments` — segments cua video
+  - `POST /api/videos/{id}/process` — trigger pipeline (async)
+  - `GET /api/graph/concepts` — list concepts (pagination)
+  - `GET /api/graph/concepts/{name}` — chi tiet concept + relationships + segments
+  - `GET /api/graph/concepts/{name}/prerequisites` — prerequisite chain
+  - `POST /api/search` — semantic search
+  - `POST /api/learning-path` — tao learning path
+  - `GET /api/health` — health check
+
+#### 2.8 CLI Updates
+- **Trang thai:** Hoan thanh
+- **Cong viec:**
+  - [x] `lecgraph build-graph <JSON_PATH>` — build Neo4j graph + index ChromaDB
+  - [x] `lecgraph serve` — start FastAPI server
+
+### Ket qua test Phase 2
+
+| Metric | Ket qua |
+|---|---|
+| Tests moi (Phase 2) | 56 tests |
+| Tests cu (Phase 1) | 53 tests |
+| Tong cong | 109/109 passed |
+| Thoi gian chay | ~2 giay |
 
 ---
 
@@ -337,6 +386,6 @@ Danh gia chat luong, fix issues, deploy va chuan bi portfolio.
 | Phase | Trang thai | Hoan thanh |
 |---|---|---|
 | Phase 1 — Foundation Pipeline | Hoan thanh | 100% |
-| Phase 2 — Graph & Search | Chua bat dau | 0% |
+| Phase 2 — Graph & Search | Hoan thanh | 100% |
 | Phase 3 — Frontend | Chua bat dau | 0% |
 | Phase 4 — Evaluation & Polish | Chua bat dau | 0% |

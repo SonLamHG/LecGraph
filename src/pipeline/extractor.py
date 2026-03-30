@@ -1,17 +1,19 @@
 """Knowledge extraction from segments using LLM (OpenAI API)."""
 
 import json
-import re
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from openai import OpenAI
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn
 
 from src.config import settings
+from src.pipeline.llm_utils import (
+    QuotaExhaustedError,
+    call_llm as _call_llm,
+    parse_json_response as _parse_json_response,
+)
 from src.pipeline.models import (
     Concept,
     Example,
@@ -26,88 +28,11 @@ console = Console(force_terminal=True)
 
 PROMPTS_DIR = Path(__file__).parent.parent / "config" / "prompts"
 
-_client = None
-_client_lock = threading.Lock()
-
-
-def _get_client():
-    """Get or create the OpenAI client instance (thread-safe)."""
-    global _client
-    if _client is None:
-        with _client_lock:
-            if _client is None:
-                _client = OpenAI(api_key=settings.openai_api_key)
-    return _client
-
 
 def _load_prompt(name: str) -> str:
     """Load a prompt template from the prompts directory."""
     path = PROMPTS_DIR / f"{name}.txt"
     return path.read_text(encoding="utf-8")
-
-
-class QuotaExhaustedError(Exception):
-    """Raised when the API key has no quota left. Retrying won't help."""
-    pass
-
-
-def _call_llm(prompt: str, max_retries: int = 3) -> str:
-    """Call OpenAI API with smart retry: only retry temporary rate limits."""
-    client = _get_client()
-
-    for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                model=settings.llm_model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=settings.llm_max_tokens,
-                temperature=0.2,
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            error_msg = str(e)
-            if "429" not in error_msg:
-                # Check for insufficient_quota separately
-                if "insufficient_quota" in error_msg:
-                    raise QuotaExhaustedError(
-                        "API key quota exhausted. "
-                        "Check your billing at https://platform.openai.com/account/billing"
-                    )
-                raise
-
-            # Distinguish: quota exhausted vs temporary rate limit
-            if "insufficient_quota" in error_msg:
-                raise QuotaExhaustedError(
-                    "API key quota exhausted. "
-                    "Check your billing at https://platform.openai.com/account/billing"
-                )
-
-            # Temporary rate limit — retry with delay
-            match = re.search(r"retry after ([\d.]+)", error_msg, re.IGNORECASE)
-            wait_time = min(float(match.group(1)) + 2 if match else 15.0, 30.0)
-            console.print(
-                f"  [yellow]Rate limited. Waiting {wait_time:.0f}s "
-                f"(attempt {attempt + 1}/{max_retries})...[/]"
-            )
-            time.sleep(wait_time)
-
-    raise RuntimeError(f"Failed after {max_retries} retries")
-
-
-def _parse_json_response(text: str) -> list | dict:
-    """Parse JSON from LLM response, handling markdown code blocks."""
-    text = text.strip()
-
-    # Strip markdown code block if present
-    if text.startswith("```"):
-        lines = text.split("\n")
-        # Remove first line (```json) and last line (```)
-        lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines)
-
-    return json.loads(text)
 
 
 def _extract_concepts(segment: Segment, video_title: str) -> list[Concept]:

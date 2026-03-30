@@ -30,5 +30,22 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
     llm_max_workers: int = 5
 
+    # Neo4j
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "password"
+    neo4j_database: str = "neo4j"
+
+    # ChromaDB
+    chroma_persist_dir: str = "data/chroma"
+
+    # Entity Resolution
+    entity_resolution_similarity_threshold: float = 0.75
+
+    # API
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+    api_cors_origins: list[str] = ["http://localhost:3000"]
+
     # Output
     output_dir: Path = Path("output")

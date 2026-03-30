@@ -4,22 +4,15 @@ import numpy as np
 from rich.console import Console
 
 from src.config import settings
+from src.pipeline.embeddings import get_embedding_model
 from src.pipeline.models import Segment, Sentence
 
 console = Console(force_terminal=True)
 
 
-def _load_embedding_model():
-    """Load sentence-transformers model."""
-    from sentence_transformers import SentenceTransformer
-
-    console.print(f"[bold blue]Loading embedding model:[/] {settings.embedding_model}")
-    model = SentenceTransformer(settings.embedding_model)
-    return model
-
-
-def _embed_sentences(model, sentences: list[Sentence]) -> np.ndarray:
+def _embed_sentences(sentences: list[Sentence]) -> np.ndarray:
     """Embed all sentences into vectors."""
+    model = get_embedding_model()
     texts = [s.text for s in sentences]
     embeddings = model.encode(texts, show_progress_bar=False, batch_size=32)
     return np.array(embeddings)
@@ -225,8 +218,7 @@ def segment(
     console.print(f"[bold blue]Segmenting {len(sentences)} sentences...[/]")
 
     # Step 1: Embed sentences
-    model = _load_embedding_model()
-    embeddings = _embed_sentences(model, sentences)
+    embeddings = _embed_sentences(sentences)
     console.print(f"[dim]Embedded {len(sentences)} sentences[/]")
 
     # Step 2: Compute consecutive cosine similarity

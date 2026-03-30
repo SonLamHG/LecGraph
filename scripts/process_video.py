@@ -207,5 +207,48 @@ def inspect(json_path: str):
     _print_summary(result)
 
 
+@cli.command("build-graph")
+@click.argument("json_path")
+def build_graph(json_path: str):
+    """Build Neo4j knowledge graph and ChromaDB index from pipeline output JSON."""
+    path = Path(json_path)
+    if not path.exists():
+        console.print(f"[red]File not found: {path}[/]")
+        return
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    result = PipelineResult.model_validate(data)
+
+    # Build graph
+    from src.pipeline.graph_builder import build_graph as _build_graph
+    graph_stats = _build_graph(result)
+
+    # Index into ChromaDB
+    from src.pipeline.indexer import index_pipeline_result
+    index_stats = index_pipeline_result(result)
+
+    console.print(Panel(
+        f"[bold]Graph Build Complete[/]\n"
+        f"Neo4j: {graph_stats}\n"
+        f"ChromaDB: {index_stats}",
+        title="[bold green]Done",
+        border_style="green",
+    ))
+
+
+@cli.command()
+@click.option("--host", default=None, help="Host to bind to")
+@click.option("--port", default=None, type=int, help="Port to bind to")
+def serve(host: str | None, port: int | None):
+    """Start the FastAPI server."""
+    import uvicorn
+    uvicorn.run(
+        "src.api.main:app",
+        host=host or settings.api_host,
+        port=port or settings.api_port,
+        reload=False,
+    )
+
+
 if __name__ == "__main__":
     cli()

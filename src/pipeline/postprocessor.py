@@ -10,6 +10,33 @@ IMPORTANCE_RANK = {"core": 3, "supporting": 2, "mentioned": 1}
 # Relationship types where direction matters: from is the PART/SMALL, to is the WHOLE/BIG
 _DIRECTIONAL_TYPES = {"is_part_of", "depends_on", "applies_to", "extends", "hyperparameter_of"}
 
+# Valid concept types and aliases for normalization
+VALID_TYPES = {
+    "definition", "algorithm", "theorem", "technique", "property",
+    "model", "framework", "function", "process", "structure", "metric",
+}
+
+TYPE_ALIASES = {
+    "concept": "definition",
+    "application": "technique",
+    "method": "technique",
+    "formula": "theorem",
+    "equation": "theorem",
+    "architecture": "model",
+    "component": "structure",
+    "layer": "structure",
+    "measure": "metric",
+    "loss": "function",
+    "activation": "function",
+}
+
+# Noise keywords — concepts containing these are likely non-educational
+_NOISE_KEYWORDS = {
+    "patreon", "sponsor", "subscribe", "community support", "crowdfunding",
+    "merchandise", "donation", "channel", "playlist", "click here",
+    "like and subscribe", "notification bell",
+}
+
 
 def _normalize_name(name: str) -> str:
     """Normalize a concept name for matching.
@@ -103,6 +130,48 @@ def _fix_relationship_direction(rel: Relationship) -> Relationship:
         )
 
     return rel
+
+
+def filter_noise_concepts(knowledge_units: list[KnowledgeUnit]) -> list[KnowledgeUnit]:
+    """Remove non-educational noise concepts (sponsors, promotions, etc.)."""
+    def _is_noise(concept: Concept) -> bool:
+        name_lower = concept.name.lower()
+        def_lower = concept.definition.lower()
+        text = name_lower + " " + def_lower
+
+        # Check noise keywords
+        for keyword in _NOISE_KEYWORDS:
+            if keyword in text:
+                return True
+
+        return False
+
+    filtered_count = 0
+    for ku in knowledge_units:
+        noise_names = {c.name for c in ku.concepts if _is_noise(c)}
+        if noise_names:
+            filtered_count += len(noise_names)
+            ku.concepts = [c for c in ku.concepts if c.name not in noise_names]
+            ku.relationships = [
+                r for r in ku.relationships
+                if r.from_concept not in noise_names and r.to_concept not in noise_names
+            ]
+
+    return knowledge_units
+
+
+def normalize_concept_types(knowledge_units: list[KnowledgeUnit]) -> list[KnowledgeUnit]:
+    """Normalize concept types to the valid set."""
+    for ku in knowledge_units:
+        for concept in ku.concepts:
+            t = concept.type.lower().strip()
+            if t in VALID_TYPES:
+                concept.type = t
+            elif t in TYPE_ALIASES:
+                concept.type = TYPE_ALIASES[t]
+            else:
+                concept.type = "definition"
+    return knowledge_units
 
 
 def deduplicate_concepts(knowledge_units: list[KnowledgeUnit]) -> list[KnowledgeUnit]:

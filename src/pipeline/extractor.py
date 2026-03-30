@@ -247,9 +247,79 @@ def extract_all(
     total_concepts = sum(len(ku.concepts) for ku in knowledge_units)
     total_rels = sum(len(ku.relationships) for ku in knowledge_units)
     console.print(
-        f"\n[green]Extraction complete:[/] "
+        f"\n[green]Per-segment extraction complete:[/] "
         f"{total_concepts} concepts, {total_rels} relationships "
         f"from {len(knowledge_units)}/{len(segments)} segments"
     )
 
+    # Global relationship pass
+    if knowledge_units and not quota_exhausted.is_set():
+        try:
+            global_rels = _extract_global_relationships(knowledge_units, video_title)
+            if global_rels:
+                global_ku = KnowledgeUnit(
+                    segment_id="global",
+                    video_id=video_id,
+                    title="Global Relationships",
+                    timestamp=TimestampRange(start=0, end=0),
+                    concepts=[],
+                    relationships=global_rels,
+                    examples=[],
+                    key_quotes=[],
+                )
+                knowledge_units.append(global_ku)
+                console.print(
+                    f"[green]Global pass:[/] {len(global_rels)} cross-segment relationships added"
+                )
+        except QuotaExhaustedError:
+            console.print("[yellow]Skipped global pass (quota exhausted)[/]")
+        except Exception as e:
+            console.print(f"[yellow]Global pass failed: {e}[/]")
+
     return knowledge_units
+
+
+def _extract_global_relationships(
+    knowledge_units: list[KnowledgeUnit],
+    video_title: str,
+) -> list[Relationship]:
+    """Extract cross-segment relationships from all concepts (1 LLM call).
+
+    Takes all unique concepts from all KUs and asks the LLM to find
+    structural/prerequisite relationships between them.
+    """
+    # Collect unique concepts
+    seen = set()
+    all_concepts = []
+    for ku in knowledge_units:
+        for c in ku.concepts:
+            if c.name not in seen:
+                seen.add(c.name)
+                all_concepts.append({"name": c.name, "type": c.type, "definition": c.definition})
+
+    if len(all_concepts) < 2:
+        return []
+
+    template = _load_prompt("global_relationship_extraction")
+    prompt = template.format(
+        video_title=video_title,
+        concepts_json=json.dumps(all_concepts, ensure_ascii=False, indent=2),
+    )
+
+    console.print(
+        f"\n[bold blue]Global relationship pass:[/] {len(all_concepts)} concepts"
+    )
+
+    response = _call_llm(prompt)
+    raw_rels = _parse_json_response(response)
+
+    relationships = []
+    for r in raw_rels:
+        relationships.append(Relationship(
+            from_concept=r["from_concept"],
+            to_concept=r["to_concept"],
+            type=r.get("type", "depends_on"),
+            evidence=r.get("evidence", ""),
+        ))
+
+    return relationships

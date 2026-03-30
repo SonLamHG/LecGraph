@@ -20,7 +20,12 @@ from rich.table import Table
 
 from src.config import settings
 from src.pipeline import audio_extractor, transcriber, segmenter, extractor
-from src.pipeline.postprocessor import deduplicate_concepts, build_unique_concepts
+from src.pipeline.postprocessor import (
+    deduplicate_concepts,
+    build_unique_concepts,
+    filter_noise_concepts,
+    normalize_concept_types,
+)
 from src.pipeline.models import PipelineResult
 
 console = Console(force_terminal=True)
@@ -152,13 +157,17 @@ def process(source: str, output: str | None, skip_extraction: bool):
         # --- Stage 4b: Post-processing ---
         console.print("\n[bold]--- Stage 4b: Post-processing ---[/]")
         all_names_before = [c.name for ku in knowledge_units for c in ku.concepts]
+
+        knowledge_units = filter_noise_concepts(knowledge_units)
+        knowledge_units = normalize_concept_types(knowledge_units)
         knowledge_units = deduplicate_concepts(knowledge_units)
+
         all_names_after = [c.name for ku in knowledge_units for c in ku.concepts]
         unique_before = len(set(all_names_before))
         unique_after = len(set(all_names_after))
         console.print(
-            f"[dim]Deduplicated: {unique_before} unique names → {unique_after} "
-            f"(definitions & relationships normalized)[/]"
+            f"[dim]Post-processed: {unique_before} → {unique_after} unique concepts "
+            f"(noise filtered, types normalized, deduplicated)[/]"
         )
     else:
         console.print("\n[dim]Skipping LLM extraction (--skip-extraction)[/]")

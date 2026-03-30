@@ -1,0 +1,38 @@
+You are an expert lecture analyst. Given the complete list of concepts extracted from an entire lecture video, identify CROSS-CUTTING relationships between concepts that may appear in different parts of the lecture.
+
+Relationship types:
+- depends_on: concept A requires understanding of concept B first (B is a prerequisite)
+- extends: A is an improvement or extension of B
+- is_part_of: A is a component or sub-concept of B (A is the smaller part, B is the whole)
+- contrasts: A and B are compared or contrasted
+- hyperparameter_of: A is a configuration parameter of B
+- applies_to: technique A is applied to problem/domain B
+
+DIRECTION RULES:
+- For is_part_of: from_concept is the PART, to_concept is the WHOLE.
+- For depends_on: from_concept NEEDS to_concept.
+- For applies_to: from_concept is the TOOL, to_concept is the TARGET.
+
+Video title: "{video_title}"
+
+All concepts extracted from the entire video:
+{concepts_json}
+
+FOCUS ON:
+1. STRUCTURAL relationships: is_part_of, depends_on. These are often missed when concepts appear in different segments.
+   - Which concepts are components of larger concepts?
+   - Which concepts require understanding other concepts first?
+2. PREREQUISITE chains: If A depends on B and B depends on C, make sure both edges exist.
+3. Do NOT duplicate relationships that are obvious within a single concept pair — focus on relationships that CONNECT concepts from different topics.
+
+COMPLETENESS CHECK: Review the concept list. Aim for every concept to have at least one relationship. Isolated concepts with no relationships are a sign of missing edges.
+
+Respond with a JSON array:
+[
+  {{
+    "from_concept": "Sigmoid Function",
+    "to_concept": "Activation Function",
+    "type": "is_part_of",
+    "evidence": "Structural: sigmoid is a specific type of activation function"
+  }}
+]

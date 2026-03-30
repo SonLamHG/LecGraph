@@ -30,9 +30,13 @@ Transcript:
 ---
 
 IMPORTANT:
-- Only create relationships that are explicitly or strongly implicitly supported by the transcript
-- Include an "evidence" field quoting or paraphrasing the relevant part of the transcript
+- Include relationships that are EXPLICITLY stated AND relationships that are STRUCTURALLY obvious from the concepts themselves. For example:
+  - If "Sigmoid Function" and "Activation Function" both appear, Sigmoid Function --[is_part_of]--> Activation Function (sigmoid is a type of activation function)
+  - If "Hidden Layer" and "Neural Network" both appear, Hidden Layer --[is_part_of]--> Neural Network
+  - If "ReLU" and "Activation Function" both appear, ReLU --[is_part_of]--> Activation Function
+- Include an "evidence" field quoting or paraphrasing the relevant part of the transcript. For structural relationships, write "Structural: [reason]".
 - Relationships can reference concepts not in the list above if they are prerequisites mentioned in passing (e.g., "as we learned earlier, derivatives...")
+- COMPLETENESS CHECK: After generating relationships, review the concept list. Every concept should have at least one relationship. If a concept is isolated, consider whether it depends_on, is_part_of, or extends another concept.
 
 Respond with a JSON array. Example:
 [

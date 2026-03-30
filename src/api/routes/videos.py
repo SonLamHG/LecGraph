@@ -47,7 +47,7 @@ async def list_videos():
             title=r.get("title", ""),
             source=r.get("source", ""),
             duration=r.get("duration", 0.0),
-            status=r.get("status", "completed"),
+            status=r.get("status") or "completed",
         )
         for r in rows
     ]

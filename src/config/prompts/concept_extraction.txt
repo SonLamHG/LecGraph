@@ -3,12 +3,21 @@ You are an expert lecture analyst. Analyze the following transcript segment and 
 For each concept, identify:
 - name: exact name (prefer English technical terms if it's a technical concept)
 - aliases: other names used in the transcript for the same concept
-- type: one of [definition, algorithm, theorem, technique, property, model, framework]
+- type: one of [definition, algorithm, theorem, technique, property, model, framework, function, process, structure, metric]
+  If a concept does not clearly fit any type, use "definition" as the default. Do NOT invent new type names.
 - definition: concise definition based on how it's explained in the lecture
 - importance: one of [core, supporting, mentioned]
   - core: the main concept being taught in this segment
   - supporting: concepts explained to support the core concept
   - mentioned: concepts only briefly mentioned, not explained
+
+FILTERING RULES:
+- Extract ONLY educational/technical concepts. Do NOT extract:
+  - Sponsor messages, Patreon acknowledgments, channel promotions, social media mentions
+  - Calls to action ("like", "subscribe", "support")
+  - Names of people, channels, or organizations (unless they are named after a technical concept, e.g., "Adam optimizer")
+- Each concept must be specific enough that a student could look it up in a textbook.
+- Reject vague meta-descriptions like "data-driven approach" or "learning process" UNLESS they are technically defined in the transcript.
 
 Segment title: "{segment_title}"
 Video title: "{video_title}"

@@ -6,8 +6,8 @@
 |---|---|
 | Ten du an | LecGraph - Bien video bai giang thanh Knowledge Graph |
 | Ngay bat dau | 2026-03-15 |
-| Trang thai hien tai | Phase 2 hoan thanh, dang chuyen sang Phase 3 |
-| Tech stack | Python 3.12, Whisper, OpenAI API, sentence-transformers, Neo4j, ChromaDB, FastAPI |
+| Trang thai hien tai | Phase 3 hoan thanh, dang chuyen sang Phase 4 |
+| Tech stack | Python 3.12, Whisper, OpenAI API, sentence-transformers, Neo4j, ChromaDB, FastAPI, Next.js 15, Cytoscape.js, React Player, Tailwind CSS v4 |
 | Repository | D:\code\repo_cv |
 
 ---
@@ -307,37 +307,86 @@ Xay dung Knowledge Graph tu extracted data, implement semantic search va prerequ
 ### Muc tieu
 Xay dung web UI: graph visualization, semantic search, video player voi timestamp navigation.
 
-### Cong viec can lam
+### Cong viec da thuc hien
 
 #### 3.1 Project Setup
-- [ ] Init Next.js project trong `frontend/`
-- [ ] Setup Cytoscape.js cho graph visualization
-- [ ] Setup React Player cho video playback
-- [ ] API client config
+- **Trang thai:** Hoan thanh
+- **Mo ta:** Init Next.js 15 project voi TypeScript, Tailwind CSS v4, Cytoscape.js, React Player
+- **Cong viec:**
+  - [x] Init Next.js 15 project trong `frontend/` (App Router, TypeScript)
+  - [x] Setup Tailwind CSS v4 voi custom dark theme (Catppuccin-inspired)
+  - [x] Setup Cytoscape.js cho graph visualization
+  - [x] Setup React Player cho video playback (dynamic import, SSR-safe)
+  - [x] API client (`src/lib/api.ts`) voi type-safe functions cho moi endpoint
+  - [x] Next.js rewrites proxy `/api/*` -> `localhost:8000/api/*` (khong can CORS config rieng)
+  - [x] Sidebar navigation voi active state highlighting
+- **Files:** `frontend/package.json`, `frontend/next.config.ts`, `frontend/src/lib/api.ts`, `frontend/src/lib/utils.ts`, `frontend/src/components/layout/Sidebar.tsx`, `frontend/src/app/layout.tsx`, `frontend/src/app/globals.css`
 
 #### 3.2 Graph Explorer View
-- [ ] Render knowledge graph voi Cytoscape.js
-- [ ] Zoom, pan, click-to-select nodes
-- [ ] Color coding theo concept type va importance
-- [ ] Edge labels (depends_on, extends, ...)
-- [ ] Click node -> hien thi concept details
+- **Trang thai:** Hoan thanh
+- **Mo ta:** Interactive knowledge graph visualization voi Cytoscape.js
+- **Cong viec:**
+  - [x] Render knowledge graph voi Cytoscape.js (cose layout, animated)
+  - [x] Zoom, pan, click-to-select nodes
+  - [x] Color coding theo concept type (Theory=purple, Technique=blue, Tool=green, Application=amber)
+  - [x] Node size theo importance level (high/medium/low)
+  - [x] Edge labels (depends_on, extends, ...) voi auto-rotate
+  - [x] Click node -> hien thi concept detail panel (definition, aliases, relationships, segments)
+  - [x] Click relationship target -> navigate graph den node do
+  - [x] Legend overlay hien thi node type colors
+  - [x] URL parameter `?concept=X` de deep-link den concept
+- **Files:** `frontend/src/components/graph/GraphExplorer.tsx`, `frontend/src/app/graph/page.tsx`
 
 #### 3.3 Search Interface
-- [ ] Search bar voi semantic search
-- [ ] Hien thi results voi context (prerequisites, related, examples)
-- [ ] Click result -> navigate den video timestamp
+- **Trang thai:** Hoan thanh
+- **Mo ta:** Semantic search voi rich results display
+- **Cong viec:**
+  - [x] Search bar voi semantic search (POST /api/search)
+  - [x] Hien thi results voi context: concepts (link to graph), prerequisites, examples
+  - [x] Score bar hien thi relevance percentage
+  - [x] Timestamp display (start-end) cho moi result
+  - [x] Click result -> navigate den video player tai timestamp
+  - [x] Error handling va empty state
+- **File:** `frontend/src/app/search/page.tsx`
 
 #### 3.4 Video Player + Knowledge Panel
-- [ ] Video player voi seek-to-timestamp
-- [ ] Segment timeline bar ben duoi player
-- [ ] Knowledge panel: concepts, prerequisites, key quotes cua segment dang xem
-- [ ] Click concept -> highlight tren graph
+- **Trang thai:** Hoan thanh
+- **Mo ta:** Video player voi timestamp navigation va real-time knowledge panel
+- **Cong viec:**
+  - [x] React Player voi seek-to-timestamp (URL param `?t=seconds`)
+  - [x] Segment timeline bar ben duoi player (color-coded, clickable segments)
+  - [x] Playhead indicator tren timeline
+  - [x] Auto-detect active segment theo current playback time
+  - [x] Knowledge panel: concepts voi definitions, type indicators, prerequisites
+  - [x] Click concept -> navigate to graph view
+  - [x] YouTube video support (auto-start at timestamp)
+  - [x] Segment list voi timestamps (click to seek)
+- **File:** `frontend/src/app/video/[id]/page.tsx`
 
 #### 3.5 Learning Path View
-- [ ] Input: target concept
-- [ ] Output: ordered list cua concepts voi video timestamps
-- [ ] Progress tracking (da xem / chua xem)
-- [ ] Estimated total time
+- **Trang thai:** Hoan thanh
+- **Mo ta:** Generate va track learning path cho target concept
+- **Cong viec:**
+  - [x] Input: target concept voi datalist suggestions tu existing concepts
+  - [x] Input: known concepts (comma-separated) de prune path
+  - [x] Output: ordered list voi step numbers, definitions, video timestamps
+  - [x] Progress tracking: click circle de toggle da hoc / chua hoc
+  - [x] Progress bar hien thi % completed
+  - [x] Estimated total time va per-step duration
+  - [x] Links to video player tai dung timestamp va graph view
+  - [x] Timeline UI voi vertical connector line
+- **File:** `frontend/src/app/learning-path/page.tsx`
+
+### Ket qua build Phase 3
+
+| Metric | Ket qua |
+|---|---|
+| Framework | Next.js 15.5, React 19, TypeScript |
+| Styling | Tailwind CSS v4 (dark theme) |
+| Graph | Cytoscape.js 3.30 (cose layout) |
+| Video | React Player 2.16 (YouTube support) |
+| Build | 7 routes, all compiled successfully |
+| Bundle size | 103 kB shared + per-page chunks |
 
 ---
 
@@ -387,5 +436,5 @@ Danh gia chat luong, fix issues, deploy va chuan bi portfolio.
 |---|---|---|
 | Phase 1 — Foundation Pipeline | Hoan thanh | 100% |
 | Phase 2 — Graph & Search | Hoan thanh | 100% |
-| Phase 3 — Frontend | Chua bat dau | 0% |
+| Phase 3 — Frontend | Hoan thanh | 100% |
 | Phase 4 — Evaluation & Polish | Chua bat dau | 0% |

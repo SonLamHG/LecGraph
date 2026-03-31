@@ -37,6 +37,58 @@ async def list_concepts(
     ]
 
 
+@router.get("/data")
+async def get_graph_data(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+):
+    """Get concepts + relationships in a single call for graph visualization.
+
+    Avoids N+1 queries — returns all edges between the returned concepts.
+    """
+    # Get concepts
+    concept_rows = run_query(
+        """
+        MATCH (c:Concept)
+        RETURN c.name AS name, c.aliases AS aliases, c.type AS type,
+               c.definition AS definition, c.importance AS importance
+        ORDER BY c.importance DESC, c.name
+        SKIP $skip LIMIT $limit
+        """,
+        {"skip": skip, "limit": limit},
+    )
+    concept_names = [r["name"] for r in concept_rows]
+
+    # Get all relationships between these concepts in one query
+    rel_rows = []
+    if concept_names:
+        rel_rows = run_query(
+            """
+            MATCH (a:Concept)-[r]->(b:Concept)
+            WHERE a.name IN $names AND b.name IN $names
+            RETURN a.name AS source, b.name AS target, type(r) AS type
+            """,
+            {"names": concept_names},
+        )
+
+    return {
+        "concepts": [
+            {
+                "name": r["name"],
+                "aliases": r.get("aliases") or [],
+                "type": r.get("type", ""),
+                "definition": r.get("definition", ""),
+                "importance": r.get("importance", ""),
+            }
+            for r in concept_rows
+        ],
+        "relationships": [
+            {"source": r["source"], "target": r["target"], "type": r["type"]}
+            for r in rel_rows
+        ],
+    }
+
+
 @router.get("/concepts/{name}", response_model=ConceptDetailResponse)
 async def get_concept(name: str):
     """Get concept details with relationships and segments."""

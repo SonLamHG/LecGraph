@@ -112,24 +112,24 @@ def test_create_video_node(mock_run_write):
     assert call_args[0][1]["title"] == "Test Video"
 
 
-@patch("src.pipeline.graph_builder.run_write")
-def test_create_segment_nodes(mock_run_write):
+@patch("src.pipeline.graph_builder.run_write_batch")
+def test_create_segment_nodes(mock_run_write_batch):
     result = _make_result()
     count = _create_segment_nodes(result)
     assert count == 1
-    assert mock_run_write.call_count == 1
-    call_args = mock_run_write.call_args
+    mock_run_write_batch.assert_called_once()
+    call_args = mock_run_write_batch.call_args
     assert "MERGE (s:Segment" in call_args[0][0]
-    assert call_args[0][1]["id"] == "vid01_seg001"
+    assert call_args[0][1][0]["id"] == "vid01_seg001"
 
 
-@patch("src.pipeline.graph_builder.run_write")
-def test_create_concept_nodes(mock_run_write):
+@patch("src.pipeline.graph_builder.run_write_batch")
+def test_create_concept_nodes(mock_run_write_batch):
     result = _make_result()
     count = _create_concept_nodes(result)
     assert count == 2  # 2 unique concepts
-    # 2 concept MERGE calls + 2 EXPLAINED_IN edge calls (each concept in 1 segment)
-    assert mock_run_write.call_count == 4
+    # 2 batch calls: 1 for concept nodes, 1 for EXPLAINED_IN edges
+    assert mock_run_write_batch.call_count == 2
 
 
 @patch("src.pipeline.graph_builder.run_write")
@@ -143,19 +143,21 @@ def test_create_relationships(mock_run_write):
     assert call_args[0][1]["to_name"] == "Neural Network"
 
 
-@patch("src.pipeline.graph_builder.run_write")
-def test_create_example_nodes(mock_run_write):
+@patch("src.pipeline.graph_builder.run_write_batch")
+def test_create_example_nodes(mock_run_write_batch):
     result = _make_result()
     count = _create_example_nodes(result)
     assert count == 1
-    call_args = mock_run_write.call_args
+    mock_run_write_batch.assert_called_once()
+    call_args = mock_run_write_batch.call_args
     assert "MERGE (e:Example" in call_args[0][0]
-    assert call_args[0][1]["concept_name"] == "Neural Network"
+    assert call_args[0][1][0]["concept_name"] == "Neural Network"
 
 
+@patch("src.pipeline.graph_builder.run_write_batch")
 @patch("src.pipeline.graph_builder.run_write")
 @patch("src.pipeline.graph_builder.ensure_constraints")
-def test_build_graph_full(mock_constraints, mock_run_write):
+def test_build_graph_full(mock_constraints, mock_run_write, mock_run_write_batch):
     result = _make_result()
     stats = build_graph(result)
     assert stats["videos"] == 1

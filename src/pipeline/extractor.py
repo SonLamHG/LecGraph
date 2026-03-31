@@ -28,11 +28,16 @@ console = Console(force_terminal=True)
 
 PROMPTS_DIR = Path(__file__).parent.parent / "config" / "prompts"
 
+# Cache prompt templates in memory (loaded once from disk)
+_prompt_cache: dict[str, str] = {}
+
 
 def _load_prompt(name: str) -> str:
-    """Load a prompt template from the prompts directory."""
-    path = PROMPTS_DIR / f"{name}.txt"
-    return path.read_text(encoding="utf-8")
+    """Load a prompt template from the prompts directory (cached)."""
+    if name not in _prompt_cache:
+        path = PROMPTS_DIR / f"{name}.txt"
+        _prompt_cache[name] = path.read_text(encoding="utf-8")
+    return _prompt_cache[name]
 
 
 def _extract_concepts(segment: Segment, video_title: str) -> list[Concept]:

@@ -1,0 +1,33 @@
+# Render Blueprint — deploy backend + Neo4j
+# https://render.com/docs/blueprint-spec
+services:
+  # FastAPI Backend
+  - type: web
+    name: lecgraph-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false  # set manually in Render dashboard
+      - key: NEO4J_URI
+        fromService:
+          type: pserv
+          name: lecgraph-neo4j
+          property: hostport
+          # Render doesn't natively support Neo4j — use Aura or external.
+          # Override this with your Neo4j Aura connection URI.
+      - key: NEO4J_USER
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: CHROMA_PERSIST_DIR
+        value: /app/data/chroma
+      - key: OUTPUT_DIR
+        value: /app/output
+      - key: API_CORS_ORIGINS
+        value: '["https://your-frontend.vercel.app"]'
+    disk:
+      name: lecgraph-data
+      mountPath: /app/data
+      sizeGB: 1
+    healthCheckPath: /api/health

@@ -305,6 +305,137 @@ def build_graph(json_path: str):
     ))
 
 
+@cli.command("process-course")
+@click.argument("sources", nargs=-1, required=False)
+@click.option("--playlist", "-p", default=None, help="YouTube playlist URL")
+@click.option("--file", "-f", "source_file", default=None, help="Text file with one URL per line")
+@click.option("--max-videos", "-n", default=None, type=int, help="Max videos to process")
+@click.option("--skip-errors", is_flag=True, help="Continue on error instead of aborting")
+def process_course(
+    sources: tuple[str, ...],
+    playlist: str | None,
+    source_file: str | None,
+    max_videos: int | None,
+    skip_errors: bool,
+):
+    """
+    Batch process multiple videos (a full course).
+
+    Provide video URLs as arguments, via --playlist (YouTube), or --file (one URL per line).
+
+    Examples:
+
+      lecgraph process-course URL1 URL2 URL3
+
+      lecgraph process-course --playlist "https://youtube.com/playlist?list=..."
+
+      lecgraph process-course --file urls.txt --skip-errors
+    """
+    all_sources: list[str] = list(sources)
+
+    # Collect from playlist
+    if playlist:
+        console.print(f"[bold blue]Fetching playlist:[/] {playlist}")
+        try:
+            playlist_urls = _fetch_playlist_urls(playlist)
+            all_sources.extend(playlist_urls)
+            console.print(f"[green]Found {len(playlist_urls)} videos in playlist[/]")
+        except Exception as e:
+            console.print(f"[red]Failed to fetch playlist: {e}[/]")
+            return
+
+    # Collect from file
+    if source_file:
+        path = Path(source_file)
+        if not path.exists():
+            console.print(f"[red]File not found: {path}[/]")
+            return
+        lines = [
+            line.strip()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        all_sources.extend(lines)
+
+    if not all_sources:
+        console.print("[red]No video sources provided. Use arguments, --playlist, or --file.[/]")
+        return
+
+    if max_videos:
+        all_sources = all_sources[:max_videos]
+
+    total = len(all_sources)
+    console.print(Panel(
+        f"[bold]Batch Processing: {total} videos[/]\n"
+        f"Skip errors: {skip_errors}\n"
+        f"LLM: {settings.llm_model}\n"
+        f"Whisper: {settings.whisper_model_size}",
+        title="[bold blue]LecGraph Course Processing",
+        border_style="blue",
+    ))
+
+    results: list[dict] = []
+    for i, src in enumerate(all_sources, 1):
+        video_id = _generate_video_id(src)
+        console.print(f"\n[bold]{'='*60}[/]")
+        console.print(f"[bold blue]Video {i}/{total}:[/] {src[:80]}{'...' if len(src)>80 else ''}")
+        console.print(f"[dim]ID: {video_id}[/]")
+
+        try:
+            _run_full_pipeline(src, video_id)
+            results.append({"source": src, "video_id": video_id, "status": "success"})
+            console.print(f"[green]Video {i}/{total} completed successfully.[/]")
+        except Exception as e:
+            results.append({"source": src, "video_id": video_id, "status": "failed", "error": str(e)})
+            console.print(f"[red]Video {i}/{total} failed: {e}[/]")
+            if not skip_errors:
+                console.print("[red]Aborting. Use --skip-errors to continue on failure.[/]")
+                break
+
+    # Summary
+    success_count = sum(1 for r in results if r["status"] == "success")
+    fail_count = sum(1 for r in results if r["status"] == "failed")
+
+    summary_table = Table(title="Batch Processing Summary", show_lines=True)
+    summary_table.add_column("#", style="dim", width=4)
+    summary_table.add_column("Video ID", width=14)
+    summary_table.add_column("Source", min_width=30)
+    summary_table.add_column("Status", width=10)
+
+    for i, r in enumerate(results, 1):
+        status_style = "green" if r["status"] == "success" else "red"
+        summary_table.add_row(
+            str(i),
+            r["video_id"],
+            r["source"][:60],
+            f"[{status_style}]{r['status']}[/]",
+        )
+
+    console.print(f"\n{'='*60}")
+    console.print(summary_table)
+    console.print(Panel(
+        f"[bold]Success: {success_count} / {total}[/]\n"
+        f"Failed: {fail_count}",
+        title="[bold green]Done" if fail_count == 0 else "[bold yellow]Done with errors",
+        border_style="green" if fail_count == 0 else "yellow",
+    ))
+
+
+def _fetch_playlist_urls(playlist_url: str) -> list[str]:
+    """Extract individual video URLs from a YouTube playlist using yt-dlp."""
+    import subprocess
+    result = subprocess.run(
+        ["yt-dlp", "--flat-playlist", "--print", "url", playlist_url],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed: {result.stderr.strip()}")
+    urls = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return urls
+
+
 @cli.command()
 @click.option("--host", default=None, help="Host to bind to")
 @click.option("--port", default=None, type=int, help="Port to bind to")

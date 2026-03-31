@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
-import { type Concept, type ConceptDetail, getConcepts, getConceptDetail } from "@/lib/api";
+import { type ConceptDetail, getGraphData, getConceptDetail } from "@/lib/api";
 import { conceptTypeColor, importanceColor } from "@/lib/utils";
+
+const PAGE_SIZE = 50;
 
 interface GraphExplorerProps {
   initialConcept?: string;
@@ -15,17 +17,21 @@ export function GraphExplorer({ initialConcept, onConceptSelect }: GraphExplorer
   const cyRef = useRef<Core | null>(null);
   const [selectedConcept, setSelectedConcept] = useState<ConceptDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const loadedNamesRef = useRef<Set<string>>(new Set());
 
-  const loadGraph = useCallback(async () => {
-    try {
-      const concepts = await getConcepts(0, 200);
-      if (!containerRef.current || concepts.length === 0) {
-        setLoading(false);
-        return;
-      }
+  const addElementsToGraph = useCallback((
+    concepts: { name: string; type: string; importance: string; definition: string }[],
+    relationships: { source: string; target: string; type: string }[],
+  ) => {
+    const cy = cyRef.current;
+    if (!cy) return;
 
-      // Build nodes
-      const nodes = concepts.map((c) => ({
+    const newNodes = concepts
+      .filter((c) => !loadedNamesRef.current.has(c.name))
+      .map((c) => ({
+        group: "nodes" as const,
         data: {
           id: c.name,
           label: c.name,
@@ -35,39 +41,103 @@ export function GraphExplorer({ initialConcept, onConceptSelect }: GraphExplorer
         },
       }));
 
-      // Fetch relationships for all concepts to build edges
-      const edges: { data: { source: string; target: string; label: string } }[] = [];
-      const conceptNames = new Set(concepts.map((c) => c.name));
+    for (const c of concepts) {
+      loadedNamesRef.current.add(c.name);
+    }
 
-      // Load details for a subset to get relationships
-      const detailPromises = concepts.slice(0, 50).map((c) =>
-        getConceptDetail(c.name).catch(() => null)
-      );
-      const details = await Promise.all(detailPromises);
+    const edgeSet = new Set<string>();
+    cy.edges().forEach((e) => edgeSet.add(e.id()));
 
-      const edgeSet = new Set<string>();
-      for (const detail of details) {
-        if (!detail) continue;
-        for (const rel of detail.relationships) {
-          if (conceptNames.has(rel.target)) {
-            const edgeId = `${detail.name}-${rel.type}-${rel.target}`;
-            if (!edgeSet.has(edgeId)) {
-              edgeSet.add(edgeId);
-              edges.push({
-                data: {
-                  source: detail.name,
-                  target: rel.target,
-                  label: rel.type.replace(/_/g, " ").toLowerCase(),
-                },
-              });
-            }
-          }
-        }
+    const newEdges = relationships
+      .filter((r) => {
+        const edgeId = `${r.source}-${r.type}-${r.target}`;
+        if (edgeSet.has(edgeId)) return false;
+        return loadedNamesRef.current.has(r.source) && loadedNamesRef.current.has(r.target);
+      })
+      .map((r) => ({
+        group: "edges" as const,
+        data: {
+          id: `${r.source}-${r.type}-${r.target}`,
+          source: r.source,
+          target: r.target,
+          label: r.type.replace(/_/g, " ").toLowerCase(),
+        },
+      }));
+
+    if (newNodes.length > 0 || newEdges.length > 0) {
+      cy.add([...newNodes, ...newEdges]);
+      cy.layout({
+        name: "cose",
+        animate: true,
+        animationDuration: 500,
+        nodeRepulsion: () => 8000,
+        idealEdgeLength: () => 120,
+        gravity: 0.3,
+        padding: 40,
+        fit: newNodes.length > 10,
+      } as cytoscape.CoseLayoutOptions).run();
+    }
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore) return;
+    try {
+      const data = await getGraphData(loadedCount, PAGE_SIZE);
+      if (data.concepts.length < PAGE_SIZE) {
+        setHasMore(false);
+      }
+      addElementsToGraph(data.concepts, data.relationships);
+      setLoadedCount((prev) => prev + data.concepts.length);
+    } catch (e) {
+      console.error("Failed to load more concepts:", e);
+    }
+  }, [loadedCount, hasMore, addElementsToGraph]);
+
+  const initGraph = useCallback(async () => {
+    try {
+      if (!containerRef.current) {
+        setLoading(false);
+        return;
+      }
+
+      // Initial load
+      const data = await getGraphData(0, PAGE_SIZE);
+      if (data.concepts.length === 0) {
+        setLoading(false);
+        return;
+      }
+      if (data.concepts.length < PAGE_SIZE) {
+        setHasMore(false);
       }
 
       if (cyRef.current) {
         cyRef.current.destroy();
       }
+
+      const nodes = data.concepts.map((c) => ({
+        data: {
+          id: c.name,
+          label: c.name,
+          type: c.type,
+          importance: c.importance,
+          definition: c.definition,
+        },
+      }));
+
+      for (const c of data.concepts) {
+        loadedNamesRef.current.add(c.name);
+      }
+
+      const edges = data.relationships
+        .filter((r) => loadedNamesRef.current.has(r.source) && loadedNamesRef.current.has(r.target))
+        .map((r) => ({
+          data: {
+            id: `${r.source}-${r.type}-${r.target}`,
+            source: r.source,
+            target: r.target,
+            label: r.type.replace(/_/g, " ").toLowerCase(),
+          },
+        }));
 
       cyRef.current = cytoscape({
         container: containerRef.current,
@@ -143,6 +213,8 @@ export function GraphExplorer({ initialConcept, onConceptSelect }: GraphExplorer
         maxZoom: 4,
       });
 
+      setLoadedCount(data.concepts.length);
+
       cyRef.current.on("tap", "node", async (evt: EventObject) => {
         const name = evt.target.data("id");
         try {
@@ -184,11 +256,11 @@ export function GraphExplorer({ initialConcept, onConceptSelect }: GraphExplorer
   }, [initialConcept, onConceptSelect]);
 
   useEffect(() => {
-    loadGraph();
+    initGraph();
     return () => {
       cyRef.current?.destroy();
     };
-  }, [loadGraph]);
+  }, [initGraph]);
 
   return (
     <div className="flex h-full">
@@ -200,6 +272,17 @@ export function GraphExplorer({ initialConcept, onConceptSelect }: GraphExplorer
           </div>
         )}
         <div ref={containerRef} className="cy-container h-full" />
+
+        {/* Load More button */}
+        {hasMore && !loading && (
+          <button
+            onClick={loadMore}
+            className="absolute top-4 right-4 bg-primary/90 hover:bg-primary text-white text-xs px-3 py-1.5 rounded-lg transition-colors z-10"
+          >
+            Load more ({loadedCount} loaded)
+          </button>
+        )}
+
         {/* Legend */}
         <div className="absolute bottom-4 left-4 bg-surface/90 backdrop-blur rounded-lg p-3 text-xs space-y-1.5 border border-border">
           <div className="font-medium text-text-muted mb-1">Node Types</div>
@@ -261,7 +344,7 @@ export function GraphExplorer({ initialConcept, onConceptSelect }: GraphExplorer
                 {selectedConcept.relationships.map((r, i) => (
                   <div key={i} className="text-sm flex items-center gap-1.5">
                     <span className="text-primary-light">{r.type.replace(/_/g, " ")}</span>
-                    <span className="text-text-muted">→</span>
+                    <span className="text-text-muted">&rarr;</span>
                     <button
                       onClick={async () => {
                         const node = cyRef.current?.getElementById(r.target);

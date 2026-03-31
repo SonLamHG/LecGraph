@@ -120,6 +120,15 @@ export async function getConcepts(skip = 0, limit = 50): Promise<Concept[]> {
   return fetchAPI<Concept[]>(`/graph/concepts?skip=${skip}&limit=${limit}`);
 }
 
+export interface GraphData {
+  concepts: Concept[];
+  relationships: { source: string; target: string; type: string }[];
+}
+
+export async function getGraphData(skip = 0, limit = 50): Promise<GraphData> {
+  return fetchAPI<GraphData>(`/graph/data?skip=${skip}&limit=${limit}`);
+}
+
 export async function getConceptDetail(name: string): Promise<ConceptDetail> {
   return fetchAPI<ConceptDetail>(`/graph/concepts/${encodeURIComponent(name)}`);
 }

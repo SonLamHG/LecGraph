@@ -1,5 +1,6 @@
 """Transcribe audio to text with timestamps using Whisper."""
 
+import threading
 from pathlib import Path
 
 from rich.console import Console
@@ -19,34 +20,47 @@ PAUSE_THRESHOLD = 1.0
 # Maximum words per sentence before forcing a break
 MAX_WORDS_PER_SENTENCE = 50
 
+# Singleton Whisper model — loaded once, reused across videos
+_whisper_model = None
+_whisper_lock = threading.Lock()
+
 
 def _load_model():
-    """Load the faster-whisper model."""
-    from faster_whisper import WhisperModel
+    """Load the faster-whisper model (singleton — cached after first load)."""
+    global _whisper_model
+    if _whisper_model is not None:
+        console.print("[dim]Using cached Whisper model[/]")
+        return _whisper_model
 
-    device = settings.whisper_device
-    if device == "auto":
-        try:
-            import torch
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        except ImportError:
-            device = "cpu"
+    with _whisper_lock:
+        if _whisper_model is not None:
+            return _whisper_model
 
-    compute_type = settings.whisper_compute_type
-    if device == "cpu" and compute_type == "float16":
-        compute_type = "int8"
+        from faster_whisper import WhisperModel
 
-    console.print(
-        f"[bold blue]Loading Whisper model:[/] {settings.whisper_model_size} "
-        f"(device={device}, compute={compute_type})"
-    )
+        device = settings.whisper_device
+        if device == "auto":
+            try:
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
 
-    model = WhisperModel(
-        settings.whisper_model_size,
-        device=device,
-        compute_type=compute_type,
-    )
-    return model
+        compute_type = settings.whisper_compute_type
+        if device == "cpu" and compute_type == "float16":
+            compute_type = "int8"
+
+        console.print(
+            f"[bold blue]Loading Whisper model:[/] {settings.whisper_model_size} "
+            f"(device={device}, compute={compute_type})"
+        )
+
+        _whisper_model = WhisperModel(
+            settings.whisper_model_size,
+            device=device,
+            compute_type=compute_type,
+        )
+        return _whisper_model
 
 
 def _extract_words(model, audio_path: Path) -> list[Word]:

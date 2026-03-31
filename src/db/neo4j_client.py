@@ -49,6 +49,21 @@ def run_write(cypher: str, params: dict | None = None) -> None:
         session.run(cypher, params or {})
 
 
+def run_write_batch(cypher: str, batch_params: list[dict]) -> None:
+    """Execute a write Cypher query for each param set in a single transaction.
+
+    Much faster than individual run_write calls — avoids per-query transaction overhead.
+    """
+    if not batch_params:
+        return
+    driver = get_driver()
+    with driver.session(database=settings.neo4j_database) as session:
+        with session.begin_transaction() as tx:
+            for params in batch_params:
+                tx.run(cypher, params)
+            tx.commit()
+
+
 def ensure_constraints():
     """Create uniqueness constraints and indexes if they don't exist."""
     constraints = [
@@ -59,6 +74,9 @@ def ensure_constraints():
     indexes = [
         "CREATE INDEX concept_type_idx IF NOT EXISTS FOR (c:Concept) ON (c.type)",
         "CREATE INDEX concept_importance_idx IF NOT EXISTS FOR (c:Concept) ON (c.importance)",
+        # Composite indexes for common query patterns
+        "CREATE INDEX segment_video_idx IF NOT EXISTS FOR (s:Segment) ON (s.video_id)",
+        "CREATE INDEX example_segment_idx IF NOT EXISTS FOR (e:Example) ON (e.segment_id)",
     ]
 
     driver = get_driver()

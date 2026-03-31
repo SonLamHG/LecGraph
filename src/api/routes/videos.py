@@ -1,9 +1,14 @@
 """Video management routes."""
 
+import logging
+import traceback
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from src.api.models import SegmentResponse, StatusResponse, VideoCreate, VideoResponse
 from src.db.neo4j_client import run_query, run_write
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -107,6 +112,7 @@ async def process_video(video_id: str, background_tasks: BackgroundTasks):
                 {"id": vid_id},
             )
         except Exception as e:
+            logger.error("Pipeline failed for %s: %s\n%s", vid_id, e, traceback.format_exc())
             run_write(
                 "MATCH (v:Video {id: $id}) SET v.status = 'failed'",
                 {"id": vid_id},

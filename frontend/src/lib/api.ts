@@ -88,10 +88,28 @@ export interface LearningPath {
   concept_count: number;
 }
 
+export interface StatusResponse {
+  status: string;
+  message: string;
+}
+
 // --- API Functions ---
 
 export async function getVideos(): Promise<Video[]> {
   return fetchAPI<Video[]>("/videos");
+}
+
+export async function addVideo(source: string): Promise<Video> {
+  return fetchAPI<Video>("/videos", {
+    method: "POST",
+    body: JSON.stringify({ source }),
+  });
+}
+
+export async function processVideo(videoId: string): Promise<StatusResponse> {
+  return fetchAPI<StatusResponse>(`/videos/${videoId}/process`, {
+    method: "POST",
+  });
 }
 
 export async function getVideoSegments(videoId: string): Promise<Segment[]> {

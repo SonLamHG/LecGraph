@@ -2,7 +2,12 @@ FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Deno (required by yt-dlp for YouTube JS extraction)
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
 
 WORKDIR /app
 
@@ -24,8 +29,8 @@ COPY src/ src/
 COPY scripts/ scripts/
 RUN pip install --no-cache-dir --no-deps .
 
-# Non-root user
-RUN useradd -r -s /bin/false appuser && \
+# Non-root user with home dir (needed for HuggingFace model cache)
+RUN useradd -r -m -s /bin/false appuser && \
     mkdir -p output data/chroma && \
     chown -R appuser:appuser /app
 USER appuser

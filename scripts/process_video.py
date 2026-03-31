@@ -31,6 +31,66 @@ from src.pipeline.models import PipelineResult
 console = Console(force_terminal=True)
 
 
+def _run_full_pipeline(source: str, video_id: str):
+    """Run the full pipeline programmatically (used by API).
+
+    Raises on failure so the caller can set status='failed'.
+    """
+    work_dir = Path(tempfile.mkdtemp(prefix="lecgraph_"))
+
+    # Stage 1: Audio
+    audio_path, video_title = audio_extractor.extract_audio(source, work_dir)
+
+    # Stage 2: Transcription
+    sentences = transcriber.transcribe(audio_path)
+    if not sentences:
+        raise RuntimeError("No speech detected in the audio")
+
+    duration = sentences[-1].end
+
+    # Stage 3: Segmentation
+    segments = segmenter.segment(sentences, video_id)
+
+    # Stage 4: Knowledge Extraction
+    knowledge_units = []
+    if settings.openai_api_key:
+        knowledge_units = extractor.extract_all(segments, video_id, video_title)
+        knowledge_units = filter_noise_concepts(knowledge_units)
+        knowledge_units = normalize_concept_types(knowledge_units)
+        knowledge_units = deduplicate_concepts(knowledge_units)
+
+    # Build result
+    unique_concepts = build_unique_concepts(knowledge_units) if knowledge_units else []
+    result = PipelineResult(
+        video_id=video_id,
+        video_title=video_title,
+        source=source,
+        duration=duration,
+        segments=segments,
+        knowledge_units=knowledge_units,
+        unique_concepts=unique_concepts,
+    )
+
+    # Save JSON
+    output_dir = settings.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{video_id}.json"
+    output_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+
+    # Build graph + index
+    from src.pipeline.graph_builder import build_graph
+    from src.pipeline.indexer import index_pipeline_result
+    build_graph(result)
+    index_pipeline_result(result)
+
+    # Update video node with real metadata
+    from src.db.neo4j_client import run_write
+    run_write(
+        "MATCH (v:Video {id: $id}) SET v.title = $title, v.duration = $duration",
+        {"id": video_id, "title": video_title, "duration": duration},
+    )
+
+
 def _generate_video_id(source: str) -> str:
     """Generate a short deterministic ID from the source."""
     h = hashlib.md5(source.encode()).hexdigest()[:8]
